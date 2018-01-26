@@ -1,0 +1,130 @@
+
+server {
+     listen 80 default_server;
+     listen [::]:80 default_server;
+
+    server_name telemed.loc;
+
+    resolver 127.0.0.1;
+
+    root /var/www/html/telemed/web;
+
+    index index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location /theme {
+        root /var/www/html/telemed-front;
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location /file/ {
+        location ~ ^/file/(?<secure>[\w-]+,\d+)/(?<file>.+)$ {
+            secure_link     $secure;
+            secure_link_md5      demelet$secure_link_expires$file;
+
+            if ($secure_link = "") {
+                return 403;
+            }
+            if ($secure_link = 0) {
+                return 410;
+            }
+
+            proxy_pass http://upload/files/$file;
+        }
+
+        return 404;
+        #
+        #        error_page  403       /forbidden.html;
+        #        error_page  404       /not_found.html;
+        #        error_page  410  =403 /link_expired.html;
+
+    }
+
+    location /files {
+        limit_except POST PATCH HEAD {
+            deny all;
+        }
+        # Disable request and response buffering
+        proxy_request_buffering  off;
+        proxy_buffering          off;
+        proxy_http_version       1.1;
+
+        proxy_set_header Host telemed.loc:8888;
+        proxy_set_header X-Real-IP $remote_addr;
+        # Add X-Forwarded-* headers
+        proxy_set_header X-Forwarded-Host telemed.loc:8888;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_set_header         Upgrade $http_upgrade;
+        proxy_set_header         Connection "upgrade";
+        client_max_body_size     0;
+
+        proxy_pass http://upload;
+    }
+
+    location /graphiql {
+        rewrite /graphiql(.*) /$1  break;
+        try_files $uri @graphiql;
+    }
+
+    location /node_modules {
+        try_files $uri @graphiql;
+    }
+
+    location @graphiql {
+        proxy_pass http://graphiql:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location ~ \.php$ {
+
+            if ($http_origin ~* (http?://(.*\.)?telemed\.loc(:[0-9]+)?)) {
+                set $cors "true";
+            }
+
+            if ($request_method = 'OPTIONS') {
+                set $cors "${cors}options";
+            }
+
+            # non-OPTIONS indicates a normal CORS request
+            if ($request_method = 'GET') {
+                set $cors "${cors}get";
+            }
+            if ($request_method = 'POST') {
+                set $cors "${cors}post";
+            }
+
+            # if it's a GET or POST, set the standard CORS responses header
+            if ($cors = "trueget") {
+                add_header 'Access-Control-Allow-Origin' "$http_origin" always;
+                add_header 'Access-Control-Allow-Credentials' 'true';
+            }
+
+            if ($cors = "truepost") {
+                add_header 'Access-Control-Allow-Origin' "$http_origin" always;
+                add_header 'Access-Control-Allow-Credentials' 'true';
+            }
+
+            # if it's OPTIONS, for a CORS preflight request, then respond immediately with no response body
+            if ($cors = "trueoptions") {
+                add_header 'Access-Control-Allow-Origin' "$http_origin";
+                add_header 'Access-Control-Allow-Credentials' 'true';
+                add_header 'Access-Control-Max-Age' 1728000;
+                add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+                add_header 'Access-Control-Allow-Headers' 'Authorization,Content-Type,Accept,Origin,User-Agent,DNT,Cache-Control,X-Mx-ReqToken,Keep-Alive,X-Requested-With,If-Modified-Since,x-client-id, x-client-secret, x-access-token';
+                add_header 'Content-Length' 0;
+                add_header 'Content-Type' 'text/plain charset=UTF-8';
+                return 204;
+            }
+
+        fastcgi_pass phpCloud;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+}

@@ -1,0 +1,72 @@
+version: '3'
+services:
+   nginx:
+      image: nginx:latest
+      restart: unless-stopped
+      ports:
+         - "${APP_PORT}:80"
+      volumes:
+         - ../../../:/var/www/html
+         - /var/log/nginx:/var/log/nginx
+         - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+         - ./nginx/site.conf:/etc/nginx/site.conf
+         - ./nginx/sites-available:/etc/nginx/sites-available
+         - ./nginx/.htpasswd:/var/www/html/.htpasswd
+      depends_on:
+         - php
+      env_file:
+         - ../../.env
+      command: /bin/bash -c "envsubst '$$APP_SERVER_NAME $$APP_URL $$APP_PORT $$WORK_DIR' < /etc/nginx/site.conf > /etc/nginx/sites-available/site.conf && nginx -g 'daemon off;'"
+      networks:
+        - appnet
+   mysql:
+      image: mysql:5.7
+      restart: always
+      ports:
+         - "${DB_PORT}:3306"
+      volumes:
+         - /var/www/html/db/${APP_NAME}/:/var/lib/mysql/
+         - ./mysql/config:/etc/mysql/conf.d
+      command: mysqld --character-set-server=utf8 --collation-server=utf8_general_ci
+      environment:
+         MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+         MYSQL_DATABASE: ${APP_NAME}
+         MYSQL_USER: ${DB_USERNAME}
+         MYSQL_PASSWORD: ${DB_PASSWORD}
+      networks:
+         - appnet
+   php:
+      image: chumakov/php
+      deploy:
+        replicas: 2
+        resources:
+          limits:
+            cpus: "0.1"
+            memory: 50M
+        restart_policy:
+          condition: on-failure
+      restart: unless-stopped
+      environment:
+       XDEBUG_CONFIG: "remote_host=172.25.0.1 remote_port=9001 idekey=PHPSTORM"
+      volumes:
+       - "../../:${WORK_DIR}/../"
+      env_file:
+       - ../../.env
+      networks:
+       - appnet
+   redis:
+      image: local_redis
+      restart: always
+      ports:
+        - "${REDIS_PORT}:6379"
+      networks:
+        - appnet
+   graphiql:
+      image: local_graphiql
+      restart: unless-stopped
+      ports:
+         - 8081
+      networks:
+        - appnet
+networks:
+  appnet:
