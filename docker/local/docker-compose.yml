@@ -36,7 +36,7 @@ services:
       networks:
          - appnet
    php:
-      image: chumakov/php
+      build: ./php
       deploy:
         replicas: 2
         resources:
@@ -55,14 +55,14 @@ services:
       networks:
        - appnet
    redis:
-      image: local_redis
+      build: ./redis
       restart: always
       ports:
         - "${REDIS_PORT}:6379"
       networks:
         - appnet
    graphiql:
-      image: local_graphiql
+      build: ./graphiql
       restart: unless-stopped
       ports:
          - 8081

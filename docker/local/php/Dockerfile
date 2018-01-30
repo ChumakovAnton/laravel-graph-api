@@ -30,8 +30,6 @@ RUN docker-php-ext-configure intl --with-icu-dir=/opt/icu4c \
 
 COPY php.ini /usr/local/etc/php/php.ini
 
-WORKDIR /var/www/html/telemed
-
 RUN apt-get install zip unzip
 
 RUN composer global require --no-progress "fxp/composer-asset-plugin:^1.3.1"
